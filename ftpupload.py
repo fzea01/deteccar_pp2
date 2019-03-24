@@ -13,10 +13,10 @@ def placeFiles(ftp, path):
     for name in os.listdir(path):
         localpath = os.path.join(path, name)
         if os.path.isfile(localpath):
-            print("STOR", name, localpath)
+            #print("STOR", name, localpath)
             ftp.storbinary('STOR ' + name, open(localpath,'rb'))
         elif os.path.isdir(localpath):
-            print("MKD", name)
+            #print("MKD", name)
 
             try:
                 ftp.mkd(name)
@@ -27,10 +27,10 @@ def placeFiles(ftp, path):
                     raise
 
             #print("CWD", name)
-            #ftp.cwd(name)
+            ftp.cwd(name)
             placeFiles(ftp, localpath)           
             #print("CWD", "..")
-            #ftp.cwd("..")
+            ftp.cwd("..")
 
 placeFiles(ftp, filenameCV)
 
