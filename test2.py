@@ -1,44 +1,144 @@
-# File: threaded_videostream_demo.py
-
-import time
-
+#import libraries of python opencv
 import cv2
 import numpy as np
-from imutils.video import VideoStream
-import imutils
+import os
+import time
+import datetime
+import glob
+import mysql.connector
+import Adafruit_DHT
+import multitasking
+import signal
 
-# Are we using the Pi Camera?
-usingPiCamera = True
-# Set initial frame size.
-frameSize = (320, 240)
+# kill all tasks on ctrl-c
+signal.signal(signal.SIGINT, multitasking.killall)
 
-# Initialize mutithreading the video stream.
-vs = VideoStream(src=0, usePiCamera=usingPiCamera, resolution=frameSize,
-		framerate=32).start()
-# Allow the camera to warm up.
-time.sleep(2.0)
 
-timeCheck = time.time()
+print ("Car Detection System Setting ...")
+sensor = Adafruit_DHT.AM2302
+pin = 2
+pic_num = 1
+count = 0
+car2 = None
+year = datetime.date.today().strftime("%Y")
+mont = datetime.date.today().strftime("%m")
+
+if not os.path.exists('save_images/'+year+'/'+mont):
+           print ("Not Found Folder Save_images ...")
+           os.makedirs('save_images/'+year+'/'+mont)
+           print ("Created Folder Save_images  Success ...")
+
+try:
+    connection = mysql.connector.connect(host='student.coe.phuket.psu.ac.th',
+                             database='s5835512005_403',
+                             user='s5835512005_403',
+                             password='aw38KA43')
+    cur = connection.cursor()
+    if connection.is_connected():
+        db_Info = connection.get_server_info()
+        print("Succesfully Connected to MySQL database. MySQL Server version on ", db_Info)
+except Error as e:
+    print("Error while connecting to MySQL", e)
+
+           
+@multitasking.task # <== this is all it takes :-)
+def temp():
+    humidity, temperature = Adafruit_DHT.read_retry(sensor, pin)
+    if humidity is not None and temperature is not None:
+        #print('Temp={0:0.1f}*C  Humidity={1:0.1f}%'.format(temperature, humidity))
+        print('Put Temp={0:0.1f}*C To DB'.format(temperature))
+    else:
+        print('Failed to get reading. Try again!')
+    degrees = str(temperature)
+    sql = """INSERT INTO `Temp` (`Idtmp`, `Value`, `Dt`) VALUES (NULL, "{}", CURRENT_TIMESTAMP);""".format(degrees[0:4])
+    cur.execute(sql)
+    connection.commit()
+    os.system('python ftpupload.py')
+	
+@multitasking.task # <== this is all it takes :-)
+def draw_flow(img, flow, step=30):
+    try:
+        h, w = img.shape[:2]
+        y, x = np.mgrid[step/2:h:step, step/2:w:step].reshape(2,-1).astype(int)
+        fx, fy = flow[y,x].T  
+        lines = np.vstack([x, y, x+fx, y+fy]).T.reshape(-1, 2, 2)
+        lines = np.int32(lines + 0.5)
+        vis = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        cv2.polylines(vis, lines, 0, (0, 255, 0))
+    
+        for (x1, y1), (x2, y2) in lines:
+            cv2.circle(vis, (x1, y1), 1, (0, 255, 0), -1)
+            cv2.arrowedLine(frame, (x1,y1), (x2,y2), (0,0,255), 1) ##red
+    except ValueError:
+        print('You cancelled the operation.')
+
+      
+    return vis
+
+#create VideoCapture object and read from video file
+cap = cv2.VideoCapture()
+cap.open('rtsp://admin:admin@172.19.59.10:554/live_st1')
+#use trained cars XML classifiers
+car_cascade = cv2.CascadeClassifier('./cascade/cascade1.xml')
+
+# Take the first frame and convert it to gray
+ret, frame1 = cap.read()
+prvs = cv2.cvtColor(frame1,cv2.COLOR_BGR2GRAY)
+
+print ("Status Ready ...")
+print ("System Start ...")
+
+
+#read until video is completed
 while True:
-	# Get the next frame.
-	frame = vs.read()
-	
-	# If using a webcam instead of the Pi Camera,
-	# we take the extra step to change frame size.
-	if not usingPiCamera:
-		frame = imutils.resize(frame, width=frameSize[0])
+    
+    try:
+        ret, frame = cap.read()
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        cars = car_cascade.detectMultiScale(gray, 2, 1)
+        
+    #to draw arectangle in each cars 
+        for (x,y,w,h) in cars:
+            car2 = cv2.rectangle(frame,(x,y),(x+w,y+h),(0,255,0),2)
 
-	# Show video stream
-	cv2.imshow('orig', frame)
-	key = cv2.waitKey(1) & 0xFF
+    #save image     
+        for (x,y,w,h) in cars:
+            if cars is not None:
+                        print "Detec found " + "  " + str(pic_num)
+                        #crop_img = car2[y: y + h, x: x + w] 
+                        cv2.imwrite("save_images/"+year+"/"+mont+"/"+str(pic_num)+" - " +datetime.datetime.now().strftime("%y-%m-%d-%H-%M")+".jpg",frame)
+                        
+                        
+			#print str(pic_num) + "  "+"Save Success"+" "+datetime.datetime.now().strftime("%y/%m/%d - %H.%M.%S") +"\n"
+            pic_num += 1
 
-	# if the `q` key was pressed, break from the loop.
-	if key == ord("q"):
-		break
-	
-	print(1/(time.time() - timeCheck))
-	timeCheck = time.time()
+    # Calculate the dense optical flow
+        flow = cv2.calcOpticalFlowFarneback(prvs, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        rgbImg = draw_flow(gray, flow)
+        
+        if count>10:
+            temp()
+            count = 0
+            
+        count += 1
+    
+	#display the resulting frame
+        #cv2.imshow('Detect',frame)
+		
+    #press ESC or Q on keyboard to exit
+        k = cv2.waitKey(30) & 0xff
+        if k == 27 :
+            break
+        elif k == ord('q'):
+            break
+        
+    except ValueError:
+        print('You cancelled the operation.')
+        cap.release()
+	connection.close() 
 
-# Cleanup before exit.
+temp()
 cv2.destroyAllWindows()
-vs.stop()
+cap.release()
+connection.close()
+print ("End System ... ")
