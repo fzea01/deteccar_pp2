@@ -21,6 +21,10 @@ pin = 2
 pic_num = 1
 count = 0
 car2 = None
+xx = []
+yy = []
+oo = []
+nn = 0
 year = datetime.date.today().strftime("%Y")
 mont = datetime.date.today().strftime("%m")
 os.system('python startsys.py')
@@ -62,11 +66,11 @@ def draw_flow(img, flow, step=80):
         h, w = img.shape[:2]
         y, x = np.mgrid[step/2:h:step, step/2:w:step].reshape(2,-1).astype(int)
         fx, fy = flow[y,x].T
-        print ("FLOW X")
-        print fx-fy
-        
-        print ("FLOW Y")
-        print fy-fx
+        #for i in range(len(fx)):
+            #tmp = np.sqrt(np.power(fx,2)-np.power(fy,2))
+       
+        #print ("tmp")
+        #print tmp   
 
         lines = np.vstack([x, y, x+fx, y+fy]).T.reshape(-1, 2, 2)
         lines = np.int32(lines + 0.5)
@@ -74,8 +78,21 @@ def draw_flow(img, flow, step=80):
         cv2.polylines(vis, lines, 0, (0, 255, 0))
     
         for (x1, y1), (x2, y2) in lines:
+            xx.append(x2-x1)
+            yy.append(y2-y1)
             cv2.circle(vis, (x1, y1), 1, (0, 255, 0), -1)
             cv2.arrowedLine(frame, (x1,y1), (x2,y2), (0,0,255), 1) ##red
+        
+        for oo in range(len(xx)):
+            oo = np.arctan(np.divide(yy,xx))
+            
+        check(oo)      
+        print ("O:")
+        print oo
+        
+        del xx[:]
+        del yy[:]
+        del oo[:]
                 
     except ValueError:
         print('You cancelled the operation.')
@@ -83,11 +100,21 @@ def draw_flow(img, flow, step=80):
       
     return vis
 
-@multitasking.task # <== this is all it takes :-)
-def capture(img2):
-    cv2.imwrite("save_images/"+year+"/"+mont+"/"+str(pic_num)+" - " +datetime.datetime.now().strftime("%y-%m-%d-%H-%M")+".jpg",img2)
-    pic_num += 1
-    
+
+def check(aa):
+    global nn
+    global pic_num
+    for i in range(len(aa)):
+        if i > -10  and i < 45:
+            nn += 1
+            
+    if nn > 1:
+        cv2.imwrite("save_images/"+year+"/"+mont+"/"+str(pic_num)+" - " +datetime.datetime.now().strftime("%y-%m-%d-%H-%M")+".jpg",frame)
+        print("Save Success")
+        nn = 0
+        pic_num += 1
+
+
 #create VideoCapture object and read from video file
 cap = cv2.VideoCapture('./videos/fall2.avi')
 #cap = cv2.VideoCapture()
