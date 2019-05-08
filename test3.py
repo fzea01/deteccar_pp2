@@ -7,11 +7,11 @@ import datetime
 import glob
 import mysql.connector
 import Adafruit_DHT
-import multitasking
+#import multitasking
 import signal
 
 # kill all tasks on ctrl-c
-signal.signal(signal.SIGINT, multitasking.killall)
+#signal.signal(signal.SIGINT, multitasking.killall)
 
 
 print ("Car Detection System Setting ...")
@@ -22,7 +22,7 @@ count = 0
 car2 = None
 year = datetime.date.today().strftime("%Y")
 mont = datetime.date.today().strftime("%m")
-os.system('python startsys.py')
+
 if not os.path.exists('save_images/'+year+'/'+mont):
            print ("Not Found Folder Save_images ...")
            os.makedirs('save_images/'+year+'/'+mont)
@@ -35,12 +35,13 @@ try:
                              password='aw38KA43')
     cur = connection.cursor()
     if connection.is_connected():
-        print("Succesfully Connected to MySQL database")
+        db_Info = connection.get_server_info()
+        print("Succesfully Connected to MySQL database. MySQL Server version on ", db_Info)
 except Error as e:
     print("Error while connecting to MySQL", e)
 
            
-@multitasking.task # <== this is all it takes :-)
+#@multitasking.task # <== this is all it takes :-)
 def temp():
     humidity, temperature = Adafruit_DHT.read_retry(sensor, pin)
     if humidity is not None and temperature is not None:
@@ -54,7 +55,7 @@ def temp():
     connection.commit()
     os.system('python ftpupload.py')
 	
-@multitasking.task # <== this is all it takes :-)
+#@multitasking.task # <== this is all it takes :-)
 def draw_flow(img, flow, step=60):
     try:
         h, w = img.shape[:2]
@@ -68,7 +69,7 @@ def draw_flow(img, flow, step=60):
         for (x1, y1), (x2, y2) in lines:
             cv2.circle(vis, (x1, y1), 1, (0, 255, 0), -1)
             cv2.arrowedLine(frame, (x1,y1), (x2,y2), (0,0,255), 1) ##red
-            if (y2-y1)>0:
+            if (y2-y1)>1:
                 #print "FLOW POS"
                 print y2-y1
                 cars = car_cascade.detectMultiScale(gray, 2, 1)
@@ -127,15 +128,15 @@ while True:
         flow = cv2.calcOpticalFlowFarneback(prvs, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
         rgbImg = draw_flow(gray, flow)
         
-        if count>10:
+        if count>30:
             temp()
             count = 0
+            pic_num = 1
             
         count += 1
     
 	#display the resulting frame
         cv2.imshow('Detect',frame)
-        #cv2.imshow('Detect',rgbImg)
         
 		
     #press ESC or Q on keyboard to exit
@@ -154,5 +155,4 @@ temp()
 cv2.destroyAllWindows()
 cap.release()
 connection.close()
-os.system('python stopsys.py')
 print ("End System ... ")

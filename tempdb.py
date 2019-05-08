@@ -13,8 +13,7 @@ try:
                              password='aw38KA43')
     cur = connection.cursor()
     if connection.is_connected():
-        db_Info = connection.get_server_info()
-        print("Succesfully Connected to MySQL database. MySQL Server version on ", db_Info)
+        print("Succesfully Connected to MySQL database. MySQL Server version on ")
 except Error as e:
     print("Error while connecting to MySQL", e)
 
